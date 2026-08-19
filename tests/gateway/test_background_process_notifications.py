@@ -613,3 +613,48 @@ def test_gateway_drain_retains_and_formats_overflow_events():
     out_released = _format_gateway_process_notification(released)
     assert "notifications resumed" in out_released
     assert "exit code" not in out_released
+
+
+def test_gateway_watch_match_and_watch_disabled_carry_subagent_attribution():
+    """_format_gateway_process_notification used to hand-roll watch_match/
+    watch_disabled formatting with no delegation attribution at all — a
+    SEPARATE implementation from tools.process_registry.format_process_
+    notification's (which already attributes watch_match), so a subagent's
+    background process notification reached a gateway session anonymously
+    even when the CLI/TUI equivalent already attributed it correctly. Both
+    branches now delegate to the shared formatter (mirroring how this same
+    function already reuses it for async_delegation)."""
+    from tools.delegate_tool import _register_subagent, _unregister_subagent
+    from gateway.run import _format_gateway_process_notification
+
+    sid = "sa-0-gwattr1"
+    _register_subagent({
+        "subagent_id": sid,
+        "goal": "watch the build log for failures",
+        "delegation_id": "deleg_gwattr1",
+    })
+    try:
+        match_evt = {
+            "type": "watch_match",
+            "session_id": "proc_gw1",
+            "task_id": sid,
+            "command": "tail -f build.log",
+            "pattern": "FAIL",
+            "output": "FAIL: build step 3",
+            "suppressed": 0,
+        }
+        disabled_evt = {
+            "type": "watch_disabled",
+            "session_id": "proc_gw1",
+            "task_id": sid,
+            "message": "Watch patterns disabled for process proc_gw1 — 3 consecutive rate-limit windows triggered.",
+        }
+        out_match = _format_gateway_process_notification(match_evt)
+        out_disabled = _format_gateway_process_notification(disabled_evt)
+    finally:
+        _unregister_subagent(sid)
+
+    assert f"Started by subagent {sid}" in out_match
+    assert "watch the build log for failures" in out_match
+    assert f"Started by subagent {sid}" in out_disabled
+    assert "watch the build log for failures" in out_disabled

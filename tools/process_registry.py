@@ -598,6 +598,7 @@ class ProcessRegistry:
                 self.completion_queue.put({
                     "session_id": session.id,
                     "session_key": session.session_key,
+                    "task_id": session.task_id,
                     "command": session.command,
                     "type": "watch_disabled",
                     "suppressed": session._watch_suppressed,
@@ -2925,7 +2926,11 @@ def format_process_notification(evt: dict) -> "str | None":
     _attribution = _delegation_attribution_line(evt)
 
     if evt_type == "watch_disabled":
-        return f"[IMPORTANT: {evt.get('message', '')}]"
+        text = f"[IMPORTANT: {evt.get('message', '')}"
+        if _attribution:
+            text += f"\n{_attribution}"
+        text += "]"
+        return text
 
     # Overflow events carry their human-readable summary in `message` —
     # without this case they fall through to the completion formatter and
